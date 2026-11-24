@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Городская игра</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#9ad0f5;font-family:sans-serif;touch-action:none}
+canvas{display:block}
+#hud{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);left:12px;color:#fff;font-weight:700;text-shadow:0 1px 3px #000;font-size:18px}
+#ld{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;background:#1b2a3a;z-index:5}
+.b{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 24px);width:84px;height:84px;border-radius:50%;border:0;background:rgba(0,0,0,.45);color:#fff;font-size:34px;user-select:none;-webkit-user-select:none}
+#l{left:20px}#r{left:116px}
+#g{right:20px;background:rgba(40,160,70,.7);font-size:16px}
+.d{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);right:10px;padding:8px 10px;border:0;border-radius:8px;background:rgba(0,0,0,.45);color:#fff;font-size:13px}
+#d2{top:calc(env(safe-area-inset-top,0px) + 52px)}
+</style></head><body>
+<div id="ld">Загрузка моделей…</div>
+<div id="hud">$ 1500 · Таксист</div>
+<button class="d" id="d1">⟲ дороги</button><button class="d" id="d2">⟲ авто</button>
+<button class="b" id="l">◀</button><button class="b" id="r">▶</button><button class="b" id="g">ГАЗ</button>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+const T=20,N=10,CEN=(N-1)/2,wp=i=>(i-CEN)*T,LIM=N*T/2-8;
+const S=new THREE.Scene();S.background=new THREE.Color(0x9ad0f5);S.fog=new THREE.Fog(0x9ad0f5,60,220);
+const C=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,400);
+const R=new THREE.WebGLRenderer({antialias:false});R.setSize(innerWidth,innerHeight);R.setPixelRatio(Math.min(devicePixelRatio,1.5));
+R.outputEncoding=THREE.sRGBEncoding;R.shadowMap.enabled=true;document.body.appendChild(R.domElement);
+S.add(new THREE.HemisphereLight(0xffffff,0x6a8a6a,.95));
+const sun=new THREE.DirectionalLight(0xffffff,.9);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
+Object.assign(sun.shadow.camera,{left:-45,right:45,top:45,bottom:-45,near:1,far:200});S.add(sun,sun.target);
+const gr=new THREE.Mesh(new THREE.PlaneGeometry(900,900),new THREE.MeshLambertMaterial({color:0x6fb26f}));
+gr.rotation.x=-Math.PI/2;gr.position.y=-.05;gr.receiveShadow=true;S.add(gr);
+const L=new THREE.GLTFLoader();
+const load=n=>new Promise(r=>L.load(n+'.glb',g=>r(g.scene),undefined,()=>{console.warn('нет '+n);r(null)}));
+function fit(o,size,k){const s=new THREE.Vector3();new THREE.Box3().setFromObject(o).getSize(s);
+ k=k||size/Math.max(s.x,s.z);o.scale.multiplyScalar(k);o.updateMatrixWorld(true);
+ const b=new THREE.Box3().setFromObject(o),c=new THREE.Vector3();b.getCenter(c);o.position.set(-c.x,-b.min.y,-c.z);
+ const g=new THREE.Group();g.add(o);g.k=k;return g}
+const shade=o=>o.traverse(m=>{if(m.isMesh){m.castShadow=true;m.receiveShadow=true}});
+const CARS=['taxi','sedan','suv','van','police','ambulance','truck','hatchback-sports','sedan-sports','delivery'];
+const straights=[],inners=[];let sRot=0,cYaw=0;
+function mkCar(name,x,z,a){const p=P[name];const g=new THREE.Group();
+ if(p){const m=p.clone(true);m.rotation.y=cYaw;g.add(m);inners.push(m)}
+ else{const b=new THREE.Mesh(new THREE.BoxGeometry(2,1.2,4.4),new THREE.MeshLambertMaterial({color:0xf2c500}));b.position.y=.7;g.add(b)}
+ g.position.set(x,0,z);g.rotation.y=a;S.add(g);return g}
+const P={};let me,npcs=[];
+(async()=>{
+ const names=['road-straight','road-crossroad','cone',...CARS];const M={};
+ await Promise.all(names.map(async n=>M[n]=await load(n)));
+ let rk=null;
+ if(M['road-straight']){rk=fit(M['road-straight'],T).k;P.straight=fit(M['road-straight'],T,rk);shade(P.straight)}
+ if(M['road-crossroad']){P.cross=fit(M['road-crossroad'],T,rk);shade(P.cross)}
+ if(M.cone){P.cone=fit(M.cone,1.2);shade(P.cone)}
+ CARS.forEach(n=>{if(M[n]){P[n]=fit(M[n],4.4);shade(P[n])}});
+ const pal=[0xe07a5f,0xf2cc8f,0x81b29a,0x8ecae6,0xb8a1d9,0xd9d9d9];let sd=5;const rnd=()=>(sd=(sd*16807)%2147483647)/2147483647;
+ for(let i=0;i<N;i++)for(let j=0;j<N;j++){const v=i%3==0,h=j%3==0,x=wp(i),z=wp(j);
+  if(v&&h){if(P.cross){const t=P.cross.clone(true);t.position.set(x,0,z);S.add(t)}
+   if(P.cone)[[-1,-1],[1,-1],[-1,1],[1,1]].forEach(q=>{const c=P.cone.clone(true);c.position.set(x+q[0]*T*.46,0,z+q[1]*T*.46);S.add(c)})}
+  else if(v||h){if(P.straight){const t=P.straight.clone(true);t.position.set(x,0,z);t.userData.base=v?0:Math.PI/2;S.add(t);straights.push(t)}}
+  else{const hh=6+rnd()*(Math.abs(i-CEN)<3&&Math.abs(j-CEN)<3?22:8),w=T*.72;
+   const b=new THREE.Mesh(new THREE.BoxGeometry(w,hh,w),new THREE.MeshLambertMaterial({color:pal[(rnd()*6)|0]}));
+   b.position.set(x,hh/2,z);b.castShadow=b.receiveShadow=true;S.add(b)}}
+ me=mkCar('taxi',wp(3)+T*.15,wp(4),0);
+ const lanes=[0,3,6,9];
+ for(let k=0;k<10;k++){const ln=wp(lanes[k%4]),dir=k%2?1:-1,hor=k%3==0;
+  const along=(rnd()-.5)*N*T*.9,off=dir*T*.15;
+  const g=hor?mkCar(CARS[k],along,ln+off,dir>0?-Math.PI/2:Math.PI/2):mkCar(CARS[k],ln-off,along,dir>0?Math.PI:0);
+  g.userData={hor,dir,sp:6+rnd()*5};npcs.push(g)}
+ document.getElementById('ld').remove();t0=performance.now();requestAnimationFrame(loop)})();
+let a=0,sp=0,Lb=0,Rb=0,G=1,t0=0;
+const hold=(id,f)=>{const e=document.getElementById(id);['touchstart','mousedown'].forEach(n=>e.addEventListener(n,ev=>{ev.preventDefault();f(1)}));
+ ['touchend','touchcancel','mouseup','mouseleave'].forEach(n=>e.addEventListener(n,ev=>{ev.preventDefault();f(0)}))};
+hold('l',v=>Lb=v);hold('r',v=>Rb=v);hold('g',v=>G=v?1:0);
+document.getElementById('d1').onclick=()=>{sRot=sRot?0:Math.PI/2;straights.forEach(t=>t.rotation.y=t.userData.base+sRot)};
+document.getElementById('d2').onclick=()=>{cYaw+=Math.PI/2;inners.forEach(m=>m.rotation.y=cYaw)};
+addEventListener('keydown',e=>{if(e.key=='ArrowLeft')Lb=1;if(e.key=='ArrowRight')Rb=1});
+addEventListener('keyup',e=>{if(e.key=='ArrowLeft')Lb=0;if(e.key=='ArrowRight')Rb=0});
+addEventListener('resize',()=>{R.setSize(innerWidth,innerHeight);C.aspect=innerWidth/innerHeight;C.updateProjectionMatrix()});
+function loop(t){requestAnimationFrame(loop);const dt=Math.min((t-t0)/1000,.05);t0=t;
+ sp+=((G?16:0)-sp)*dt*1.5;a+=(Lb-Rb)*1.6*dt*(sp/16);
+ const dx=-Math.sin(a),dz=-Math.cos(a),p=me.position;
+ p.x=Math.max(-LIM,Math.min(LIM,p.x+dx*sp*dt));p.z=Math.max(-LIM,Math.min(LIM,p.z+dz*sp*dt));me.rotation.y=a;
+ npcs.forEach(n=>{const u=n.userData,d=u.dir*u.sp*dt;if(u.hor){n.position.x+=d;if(Math.abs(n.position.x)>LIM+10)n.position.x*=-1}
+  else{n.position.z+=d;if(Math.abs(n.position.z)>LIM+10)n.position.z*=-1}});
+ C.position.set(p.x-dx*11,6,p.z-dz*11);C.lookAt(p.x+dx*4,1.5,p.z+dz*4);
+ sun.position.set(p.x+40,70,p.z+25);sun.target.position.copy(p);R.render(S,C)}
+</script></body></html>
